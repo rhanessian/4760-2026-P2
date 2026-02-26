@@ -1,0 +1,196 @@
+//Rebecca Hanessian
+//CS4760
+//Project 2: Adding functionality to our system
+// oss file
+
+#include "worker.h"
+
+int shmid;
+struct sharedMem *shm = NULL;
+int printNano = 500000000;
+int printSec = 0;
+
+typedef struct {
+    int proc;
+    int simul;
+    float time;
+    float inter;
+} options_t;
+
+void printProcessTable(struct sharedMem *shm) {
+    printf("OSS PID:%d  SysClock Seconds: %d SysClock Nanoseconds: %d\n", getpid(), shm->seconds, shm->nanoseconds);
+    printf("Process Table:\n");
+    printf("%-5s %-10s %-8s %4s: %-10s %4s: %-10s\n", "Entry", "Occupied", "PID", "Start Seconds", "Start Nanoseconds", "End Seconds", "End Nanoseconds");
+    
+    for (int i = 0; i < MAXPROC; i++) {
+
+        if (shm->table[i].occupied == 1) {
+            printf("%-5d %-10d %-8d %4d: %-10d %4d: %-10d\n", 
+                    i, 
+                    shm->table[i].occupied, 
+                    shm->table[i].pid, 
+                    shm->table[i].startS, 
+                    shm->table[i].startN,
+                    shm->table[i].termS,   
+                    shm->table[i].termN);
+        }
+    }
+    printf("-----------------------------------------------------------------------\n");
+}
+
+void cleanTerm (int signal) {
+	if (signal == SIGALRM) {
+		fprintf(stderr, "\n60 seconds passed. Terminating.\n");
+	} else if (signal == SIGINT) {
+		fprintf(stderr, "\nCtrl-C entered. Terminating.\n");
+	}
+	
+	for (int i = 0; i < MAXPROC; i++) {
+		if (shm->table[i].occupied == 1 && shm->table[i].pid > 0) {
+			kill(shm->table[i].pid, SIGTERM);
+		}
+	}
+	
+	while(wait(NULL) > 0);
+	
+	shmdt(shm);
+	shmctl(shmid, IPC_RMID, NULL);
+
+    exit(EXIT_SUCCESS);
+}
+
+void print_usage (const char* argmt){
+	fprintf(stderr, "Usage: %s [-h] [-n proc] [-s simul] [-t timelimitForChildren] [-i intervalInSeconds]\n", argmt);
+	fprintf(stderr, "	proc is the number of user processes to launch\n");
+	fprintf(stderr, "	simul is the number of processes that can run simultaneously\n");
+	fprintf(stderr, "	timelimitForChildren is simulated time that should pass before child process terminates.\n");
+	fprintf(stderr, "	intervalInSeconds is the minimum interval between launching child processes.\n");
+	fprintf(stderr, "Default proc is 10, default simul is 3, default timelimitForChildren is 4.5, default intervalInSeconds is 0.2.\n");
+}
+
+int main (int argc, char *argv[]){
+	signal(SIGINT, cleanTerm);
+	signal(SIGALRM, cleanTerm);
+
+	pid_t pid, ppid;
+    char opt;
+    options_t options;
+
+    options.proc = 10;
+    options.simul = 3;
+    options.time = 4.5;
+    options.inter = 0.2;
+	
+	opterr = 0;
+
+	while ((opt = getopt (argc, argv, "hn:s:t:i:")) != -1)
+		switch (opt) {
+            case 'h':
+                print_usage (argv[0]);
+                return (EXIT_SUCCESS);
+			case 'n':
+				options.proc = atoi(optarg);
+				break;
+			case 's':
+				options.simul = atoi(optarg);
+				break;
+			case 't':
+				options.time = atof(optarg);
+				break;
+			case 'i':
+				options.inter = atof(optarg);
+				break;
+			default:
+				printf ("Invalid option %c\n", opt);
+				print_usage (argv[0]);
+				return (EXIT_FAILURE);		
+		}
+	
+	alarm(60);
+	
+	printf("OSS starting, PID: %d PPID: %d\n", pid, ppid);
+	printf("Called with:\n-n %d\n-s %d\n-t %f\n-i %f\n", options.proc, options.simul, options.time, options.inter);
+	
+	key_t ossKey = ftok("oss.c", 'c');
+	shmid = shmget(ossKey, sizeof(shm), 0644 | IPC_CREAT);
+	shm = shmat(shmid, 0, 0);
+	
+	int totalWorkers = 0;
+	int activeWorkers = 0;
+	
+	int nanosecInc = 500000;
+	
+	shm->seconds = 0;
+	shm->nanoseconds = 0;
+	
+	while (totalWorkers < options.proc || activeWorkers > 0) {
+		// Increment system clock
+		shm->nanoseconds += nanosecInc;
+		if (shm->nanoseconds >= 1000000000) {
+			shm->seconds++;
+			shm->nanoseconds = 0;
+		}
+		// Print process table
+		if (shm->seconds > printSec || (shm->seconds == printSec && shm->nanoseconds >= printNano)) {
+			printProcessTable(shm);
+			
+			printNano += 500000000;
+			if (printNano >= 1000000000) {
+				printSec++;
+				printNano -= 1000000000;
+			}
+		}
+		// Check if worker terminated
+		int status;
+		pid_t termWorker = waitpid(-1, &status, WNOHANG);
+		
+		// If terminated, update pcb
+		if (termWorker > 0) {
+			for (int i = 0; i < options.proc; i++) {
+        		if (shm->table[i].pid == termWorker) {
+           			shm->table[i].termS = shm->seconds;
+           			shm->table[i].termN = shm->nanoseconds;
+           			shm->table[i].occupied = 0;
+           			activeWorkers--;
+            		break;
+        		}
+    		}
+		}
+		
+		// Launch new worker
+		if (totalWorkers < options.proc && activeWorkers < options.simul) {
+			pid = fork();
+			if (pid == 0) {
+				char iterBuf[20];
+            	snprintf(iterBuf, sizeof(iterBuf), "%f", options.inter);
+           		char *newargv[] = {"./worker", iterBuf, NULL};
+            	execvp(newargv[0],newargv);
+            	perror("Execvp error\n");
+            	exit(EXIT_FAILURE);
+			} else if (pid > 0) {
+				shm->table[totalWorkers].occupied = 1;
+				shm->table[totalWorkers].pid = pid;
+    			shm->table[totalWorkers].startS = shm->seconds;
+    			shm->table[totalWorkers].startN = shm->nanoseconds;
+    			shm->table[totalWorkers].termS = 0;   
+    			shm->table[totalWorkers].termN = 0;
+    			
+				totalWorkers++;
+				activeWorkers++;
+			} else {
+				perror("Fork error\n");
+				exit(EXIT_FAILURE);
+			}  
+		}
+	}
+	
+	fprintf(stderr, "OSS PID: %d Terminating\n", pid);
+	fprintf(stderr, "%d workers were launched and terminated\n", totalWorkers);
+	fprintf(stderr, "Workers ran for a combined time of %d seconds %d nanoseconds\n", shm->seconds, shm->nanoseconds);
+
+	shmdt(shm);
+	shmctl(shmid, IPC_RMID, NULL);
+
+	return 0;
+}		
+		
