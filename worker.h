@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/shm.h>
+#include <sys/wait.h>
 
 #define MAXPROC 20
 #define EXIT_SUCCESS 0
