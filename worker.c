@@ -15,9 +15,9 @@ int main (int argc, const char *argv[]){
 	int startSeconds;
 	int startNano;
 	
-	int sysSeconds;
-	int sysNano;
-	float sysTime;
+	int sysSeconds = 0;
+	int sysNano = 0;
+	float sysTime = 0;
 	
 	int termSeconds;
 	int termNano;

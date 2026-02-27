@@ -1,1 +1,27 @@
-# 4760-2026-P2
+4760-2026-P2
+Name: Rebecca Hanessian
+Date: 2/20/2026
+Environment: macOS (Unix style)
+How to compile the project:
+	Type 'make'
+Example of how to run the project:
+	./oss -n 3 -s 2 -t 4.4 -i 0.3
+Generative AI: Google Gemini
+Prompts:
+	I did not use a prompt to build the entire project or
+	any entire source file or header file. I did a variety of 
+	Google searches on how different functions worked and how 
+	particular tasks can be accomplished. Google Gemini provides
+	an initial response to any Google query so I utilized it
+	to show code snippets that accomplish specific goals such
+	as creating shared memory or how to enforce the interval
+	of time required between launching child processes.
+Summary:
+	This tool was very helpful but often yielded results that 
+	I could only draw logic from, not direct code. It gathers data
+	from sources that include user-uploaded code so a lot of its
+	recommendations are overly specific. However, it did allow me
+	to figure out how to implement each task required for this
+	assignment. It was especially useful in debugging, particularly 
+	when running on the opsys server yielded errors that my local
+	computer had not.

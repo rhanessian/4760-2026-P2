@@ -80,7 +80,7 @@ int main (int argc, char *argv[]){
 	signal(SIGINT, cleanTerm);
 	signal(SIGALRM, cleanTerm);
 
-	pid_t pid, ppid;
+	pid_t pid;
     char opt;
     options_t options;
 
@@ -114,7 +114,7 @@ int main (int argc, char *argv[]){
 				return (EXIT_FAILURE);		
 		}
 	
-	int timeSec = (int)floor(options.time);
+	int timeSec = (int)options.time;
 	int timeNano = (int)((options.time - (float)timeSec) * 1e9);
 	
 	int interNano = options.inter * 1e9;
