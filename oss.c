@@ -135,7 +135,7 @@ int main (int argc, char *argv[]){
 	int activeWorkers = 0;
 	int totalWorkers = 0;
 	
-	int nanosecInc = 250000;
+	int nanosecInc = 5000000;
 	
 	shm->seconds = 0;
 	shm->nanoseconds = 0;
