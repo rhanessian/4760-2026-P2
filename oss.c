@@ -20,20 +20,17 @@ typedef struct {
 void printProcessTable(struct sharedMem *shm) {
     printf("OSS PID:%d  SysClock Seconds: %d SysClock Nanoseconds: %d\n", getpid(), shm->seconds, shm->nanoseconds);
     printf("Process Table:\n");
-    printf("%-5s %-10s %-8s %4s: %-10s %4s: %-10s\n", "Entry", "Occupied", "PID", "Start Seconds", "Start Nanoseconds", "End Seconds", "End Nanoseconds");
+    printf("%-6s %-10s %-7s %-15s %-12s %-12s %-10s\n", "Entry:", "Occupied:", "PID:", "Start Seconds:", "Start Nano:", "End Seconds:", "End Nano:");
     
     for (int i = 0; i < MAXPROC; i++) {
-
-        if (shm->table[i].occupied == 1) {
-            printf("%-5d %-10d %-8d %4d: %-10d %4d: %-10d\n", 
-                    i, 
-                    shm->table[i].occupied, 
-                    shm->table[i].pid, 
-                    shm->table[i].startS, 
-                    shm->table[i].startN,
-                    shm->table[i].termS,   
-                    shm->table[i].termN);
-        }
+        printf("%-6d %-10d %-7d %-15d %-12d %-12d %-10d\n", 
+            i, 
+            shm->table[i].occupied, 
+            shm->table[i].pid, 
+            shm->table[i].startS, 
+            shm->table[i].startN,
+            shm->table[i].termS,   
+            shm->table[i].termN);
     }
     printf("-----------------------------------------------------------------------\n");
 }
