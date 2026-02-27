@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/shm.h>
 #include <sys/wait.h>
+#include <math.h>
 
 #define MAXPROC 20
 #define EXIT_SUCCESS 0

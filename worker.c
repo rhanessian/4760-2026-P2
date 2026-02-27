@@ -9,8 +9,8 @@ int shmid;
 struct sharedMem *shm;
 
 int main (int argc, const char *argv[]){
-	int maxSeconds = atoi(argv[1]);
-	int maxNano = atoi(argv[2]);
+	int minSeconds = atoi(argv[1]);
+	int minNano = atoi(argv[2]);
 	
 	int startSeconds;
 	int startNano;
@@ -28,8 +28,8 @@ int main (int argc, const char *argv[]){
 	pid_t pid = getpid();
 	pid_t ppid = getppid();
 	
-	fprintf(stderr, "Worker starting, PID: %d  PPID: %d\n", pid, ppid);
-	fprintf(stderr, "Called with:\n\tInterval: %d seconds, %d nanoseconds\n", maxSeconds, maxNano);
+	fprintf(stderr, "\nWorker starting, PID: %d  PPID: %d\n", pid, ppid);
+	fprintf(stderr, "Called with:\n\tProcess Time: %d seconds, %d nanoseconds\n\n", minSeconds, minNano);
 	
 	key_t ossKey = ftok("oss.c", 'c');
 	shmid = shmget(ossKey, sizeof(struct sharedMem), 0);
@@ -38,9 +38,9 @@ int main (int argc, const char *argv[]){
 	startSeconds = shm->seconds;
 	startNano = shm->nanoseconds;
 	
-	termSeconds = startSeconds + maxSeconds;
-	termNano = startNano + maxNano;
-	termTime = termSeconds + (termNano / (1e9));
+	termSeconds = startSeconds + minSeconds;
+	termNano = startNano + minNano;
+	termTime = (float)termSeconds + ((float)termNano / (1e9));
 	
 	fprintf(stderr, "WORKER PID: %d PPID: %d\n", pid, ppid);
 	fprintf(stderr, "SysClockS: %d SysClockNano: %d TermTimeS: %d TermTimeNano: %d\n", sysSeconds, sysNano, termSeconds, termNano);
@@ -49,7 +49,7 @@ int main (int argc, const char *argv[]){
 	while (sysTime < termTime ) {
 		sysSeconds = shm->seconds;
 		sysNano = shm->nanoseconds;
-		sysTime = sysSeconds + (sysNano / (1e9));
+		sysTime = (float)sysSeconds + ((float)sysNano / (1e9));
 		timePassed = sysSeconds - startSeconds;
 		fprintf(stderr, "WORKER PID: %d PPID: %d\n", pid, ppid);
 		fprintf(stderr, "SysClockS: %d SysClockNano: %d TermTimeS: %d TermTimeNano: %d\n", sysSeconds, sysNano, termSeconds, termNano);

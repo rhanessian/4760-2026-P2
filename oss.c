@@ -9,6 +9,7 @@ int shmid;
 struct sharedMem *shm = NULL;
 int printNano = 500000000;
 int printSec = 0;
+int lastLaunchNano = 0;
 
 typedef struct {
     int proc;
@@ -72,7 +73,7 @@ void print_usage (const char* argmt){
 	fprintf(stderr, "	simul is the number of processes that can run simultaneously\n");
 	fprintf(stderr, "	timelimitForChildren is simulated time that should pass before child process terminates.\n");
 	fprintf(stderr, "	intervalInSeconds is the minimum interval between launching child processes.\n");
-	fprintf(stderr, "Default proc is 10, default simul is 3, default timelimitForChildren is 4.5, default intervalInSeconds is 0.2.\n");
+	fprintf(stderr, "Default proc is 10, default simul is 3, default timelimitForChildren is 3.5, default intervalInSeconds is 0.2.\n");
 }
 
 int main (int argc, char *argv[]){
@@ -85,7 +86,7 @@ int main (int argc, char *argv[]){
 
     options.proc = 10;
     options.simul = 3;
-    options.time = 4.5;
+    options.time = 3.5;
     options.inter = 0.2;
 	
 	opterr = 0;
@@ -113,6 +114,13 @@ int main (int argc, char *argv[]){
 				return (EXIT_FAILURE);		
 		}
 	
+	int timeSec = (int)floor(options.time);
+	int timeNano = (int)((options.time - (float)timeSec) * 1e9);
+	
+	int interNano = options.inter * 1e9;
+
+	int lastLaunchNano = -interNano;
+
 	alarm(60);
 	
 	pid_t osspid = getpid();
@@ -127,7 +135,7 @@ int main (int argc, char *argv[]){
 	int activeWorkers = 0;
 	int totalWorkers = 0;
 	
-	int nanosecInc = 500000;
+	int nanosecInc = 250000;
 	
 	shm->seconds = 0;
 	shm->nanoseconds = 0;
@@ -170,29 +178,35 @@ int main (int argc, char *argv[]){
 		
 		// Launch new worker
 		if (totalWorkers < options.proc && activeWorkers < options.simul) {
-			totalWorkers++;
 			int emptySlot = getEmpty();
-			pid = fork();
-			if (pid == 0) {
-				char iterBuf[20];
-            	snprintf(iterBuf, sizeof(iterBuf), "%f", options.inter);
-           		char *newargv[] = {"./worker", iterBuf, NULL};
-            	execvp(newargv[0],newargv);
-            	perror("Execvp error\n");
-            	exit(EXIT_FAILURE);
-			} else if (pid > 0) {
-				shm->table[emptySlot].launched = totalWorkers;
-				shm->table[emptySlot].occupied = 1;
-				shm->table[emptySlot].pid = pid;
-    			shm->table[emptySlot].startS = shm->seconds;
-    			shm->table[emptySlot].startN = shm->nanoseconds;
-    			shm->table[emptySlot].termS = 0;   
-    			shm->table[emptySlot].termN = 0;
-    			
-				activeWorkers++;
-			} else {
-				perror("Fork error\n");
-				exit(EXIT_FAILURE);
+			int sysInNano = (shm->seconds * 1e9) + shm->nanoseconds;
+			if (sysInNano >= lastLaunchNano + interNano) {
+				totalWorkers++;
+				pid = fork();
+				if (pid == 0) {
+					char sec[20];
+					char nano[20];
+					snprintf(sec, sizeof(sec), "%d", timeSec);
+					snprintf(nano, sizeof(nano), "%d", timeNano);
+           			char *newargv[] = {"./worker", sec, nano, NULL};
+            		execvp(newargv[0],newargv);
+            		perror("Execvp error\n");
+            		exit(EXIT_FAILURE);
+				} else if (pid > 0) {
+					shm->table[emptySlot].launched = totalWorkers;
+					shm->table[emptySlot].occupied = 1;
+					shm->table[emptySlot].pid = pid;
+    				shm->table[emptySlot].startS = shm->seconds;
+    				shm->table[emptySlot].startN = shm->nanoseconds;
+    				shm->table[emptySlot].termS = 0;   
+    				shm->table[emptySlot].termN = 0;
+    				sysInNano = (shm->seconds * 1e9) + shm->nanoseconds;
+    				lastLaunchNano = sysInNano;
+					activeWorkers++;
+				} else {
+					perror("Fork error\n");
+					exit(EXIT_FAILURE);
+				}
 			}  
 		}
 	}
