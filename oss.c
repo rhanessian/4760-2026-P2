@@ -20,11 +20,12 @@ typedef struct {
 void printProcessTable(struct sharedMem *shm) {
     printf("OSS PID:%d  SysClock Seconds: %d SysClock Nanoseconds: %d\n", getpid(), shm->seconds, shm->nanoseconds);
     printf("Process Table:\n");
-    printf("%-6s %-10s %-7s %-15s %-12s %-12s %-10s\n", "Entry:", "Occupied:", "PID:", "Start Seconds:", "Start Nano:", "End Seconds:", "End Nano:");
+    printf("%-6s %-9s %-10s %-7s %-15s %-12s %-12s %-10s\n", "Entry:", "Launch #:", "Occupied:", "PID:", "Start Seconds:", "Start Nano:", "End Seconds:", "End Nano:");
     
     for (int i = 0; i < MAXPROC; i++) {
-        printf("%-6d %-10d %-7d %-15d %-12d %-12d %-10d\n", 
+        printf("%-6d %-9d %-10d %-7d %-15d %-12d %-12d %-10d\n", 
             i, 
+            shm->table[i].launched,
             shm->table[i].occupied, 
             shm->table[i].pid, 
             shm->table[i].startS, 
@@ -32,7 +33,7 @@ void printProcessTable(struct sharedMem *shm) {
             shm->table[i].termS,   
             shm->table[i].termN);
     }
-    printf("-----------------------------------------------------------------------\n");
+    printf("---------------------------------------------------------------------------------\n");
 }
 
 void cleanTerm (int signal) {
@@ -54,6 +55,15 @@ void cleanTerm (int signal) {
 	shmctl(shmid, IPC_RMID, NULL);
 
     exit(EXIT_SUCCESS);
+}
+
+int getEmpty() {
+	for (int i = 0; i < MAXPROC; i++) {
+		if (shm->table[i].pid == 0 || shm->table[i].occupied == 0) {
+			return i;
+		}
+	}
+	exit(EXIT_FAILURE);
 }
 
 void print_usage (const char* argmt){
@@ -105,15 +115,17 @@ int main (int argc, char *argv[]){
 	
 	alarm(60);
 	
-	printf("OSS starting, PID: %d PPID: %d\n", pid, ppid);
+	pid_t osspid = getpid();
+	
+	printf("OSS starting, PID: %d\n", osspid);
 	printf("Called with:\n-n %d\n-s %d\n-t %f\n-i %f\n", options.proc, options.simul, options.time, options.inter);
 	
 	key_t ossKey = ftok("oss.c", 'c');
 	shmid = shmget(ossKey, sizeof(shm), 0644 | IPC_CREAT);
 	shm = shmat(shmid, 0, 0);
 	
-	int totalWorkers = 0;
 	int activeWorkers = 0;
+	int totalWorkers = 0;
 	
 	int nanosecInc = 500000;
 	
@@ -127,6 +139,7 @@ int main (int argc, char *argv[]){
 			shm->seconds++;
 			shm->nanoseconds = 0;
 		}
+		
 		// Print process table
 		if (shm->seconds > printSec || (shm->seconds == printSec && shm->nanoseconds >= printNano)) {
 			printProcessTable(shm);
@@ -137,6 +150,7 @@ int main (int argc, char *argv[]){
 				printNano -= 1000000000;
 			}
 		}
+		
 		// Check if worker terminated
 		int status;
 		pid_t termWorker = waitpid(-1, &status, WNOHANG);
@@ -144,7 +158,7 @@ int main (int argc, char *argv[]){
 		// If terminated, update pcb
 		if (termWorker > 0) {
 			for (int i = 0; i < options.proc; i++) {
-        		if (shm->table[i].pid == termWorker) {
+        		if (shm->table[i].pid == termWorker && shm->table[i].occupied == 1) {
            			shm->table[i].termS = shm->seconds;
            			shm->table[i].termN = shm->nanoseconds;
            			shm->table[i].occupied = 0;
@@ -156,6 +170,8 @@ int main (int argc, char *argv[]){
 		
 		// Launch new worker
 		if (totalWorkers < options.proc && activeWorkers < options.simul) {
+			totalWorkers++;
+			int emptySlot = getEmpty();
 			pid = fork();
 			if (pid == 0) {
 				char iterBuf[20];
@@ -165,14 +181,14 @@ int main (int argc, char *argv[]){
             	perror("Execvp error\n");
             	exit(EXIT_FAILURE);
 			} else if (pid > 0) {
-				shm->table[totalWorkers].occupied = 1;
-				shm->table[totalWorkers].pid = pid;
-    			shm->table[totalWorkers].startS = shm->seconds;
-    			shm->table[totalWorkers].startN = shm->nanoseconds;
-    			shm->table[totalWorkers].termS = 0;   
-    			shm->table[totalWorkers].termN = 0;
+				shm->table[emptySlot].launched = totalWorkers;
+				shm->table[emptySlot].occupied = 1;
+				shm->table[emptySlot].pid = pid;
+    			shm->table[emptySlot].startS = shm->seconds;
+    			shm->table[emptySlot].startN = shm->nanoseconds;
+    			shm->table[emptySlot].termS = 0;   
+    			shm->table[emptySlot].termN = 0;
     			
-				totalWorkers++;
 				activeWorkers++;
 			} else {
 				perror("Fork error\n");
@@ -181,7 +197,9 @@ int main (int argc, char *argv[]){
 		}
 	}
 	
-	fprintf(stderr, "OSS PID: %d Terminating\n", pid);
+	printProcessTable(shm);
+	
+	fprintf(stderr, "OSS PID: %d Terminating\n", osspid);
 	fprintf(stderr, "%d workers were launched and terminated\n", totalWorkers);
 	fprintf(stderr, "Workers ran for a combined time of %d seconds %d nanoseconds\n", shm->seconds, shm->nanoseconds);
 

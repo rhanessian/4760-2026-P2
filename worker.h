@@ -13,6 +13,7 @@
 #define EXIT_FAILURE 1
 
 struct PCB{
+	int launched;
     int occupied;        
     pid_t pid;            
     int startS;
